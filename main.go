@@ -20,15 +20,18 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"path"
 
 	"cuelang.org/go/cue/ast"
 	cueastutil "cuelang.org/go/cue/ast/astutil"
 	cueformat "cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/token"
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
 
 	encodingcue "github.com/ornew/protoc-gen-cue/internal/encoding/cue"
+	"github.com/ornew/protoc-gen-cue/pkg/options"
 )
 
 var (
@@ -37,9 +40,29 @@ var (
 	SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
 )
 
+// hasCuePackageOption checks if a proto file has the core.cue_package option set
+func hasCuePackageOption(file *protogen.File) bool {
+	fileOpts := file.Proto.GetOptions()
+	if fileOpts == nil {
+		return false
+	}
+
+	ext := proto.GetExtension(fileOpts, options.E_CuePackage)
+	if ext == nil {
+		return false
+	}
+
+	if cuePackage, ok := ext.(string); ok && cuePackage != "" {
+		return true
+	}
+
+	return false
+}
+
 func main() {
 	var flags flag.FlagSet
 	_ = flags.String("root", ".", "")
+	generateDefinedPackagesOnly := flags.Bool("generate_defined_packages_only", false, "only generate CUE for files with core.cue_package option set")
 	protogen.Options{
 		ParamFunc: flags.Set,
 	}.Run(func(gen *protogen.Plugin) error {
@@ -60,8 +83,13 @@ func main() {
 			}
 		}
 		ctx := context.Background()
-		for path, file := range genFiles {
-			node, err := cuegen.GenerateFile(ctx, path)
+		for filePath, file := range genFiles {
+			// Skip files without core.cue_package option if generate_defined_packages_only is true
+			if *generateDefinedPackagesOnly && !hasCuePackageOption(file) {
+				continue
+			}
+
+			node, err := cuegen.GenerateFile(ctx, filePath)
 			if err != nil {
 				return fmt.Errorf("encode: %w", err)
 			}
@@ -72,7 +100,7 @@ func main() {
 					{Slash: token.Newline.Pos(), Text: "// Versions:"},
 					{Slash: token.Newline.Pos(), Text: "//     protoc-gen-cue: " + protocVersion},
 					{Slash: token.Newline.Pos(), Text: "//     protoc:         " + Version},
-					{Slash: token.Newline.Pos(), Text: "// Source: " + path},
+					{Slash: token.Newline.Pos(), Text: "// Source: " + filePath},
 				},
 			})
 			if err := cueastutil.Sanitize(node); err != nil {
@@ -82,7 +110,14 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("format: %w", err)
 			}
-			filename := file.GeneratedFilenamePrefix + "_gen.cue"
+
+			// Construct filename using the original proto file path like pubsub generator does
+			protoDir := path.Dir(file.Desc.Path())
+			protoBase := path.Base(file.Desc.Path())
+			// Remove .proto extension and add _gen.cue
+			filenameBase := protoBase[:len(protoBase)-len(path.Ext(protoBase))]
+			filename := protoDir + "/" + filenameBase + "_gen.cue"
+
 			o := gen.NewGeneratedFile(filename, file.GoImportPath)
 			_, err = o.Write(b)
 			if err != nil {
