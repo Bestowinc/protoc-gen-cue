@@ -6,12 +6,11 @@ toolchain go1.24.3
 
 require (
 	cuelang.org/go v0.5.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.36.10
 )
 
 require (
 	github.com/cockroachdb/apd/v2 v2.0.2 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/mpvl/unique v0.0.0-20150818121801-cbe035fff7de // indirect
 	github.com/pkg/errors v0.9.1 // indirect
