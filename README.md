@@ -12,17 +12,17 @@ Complies with [protojson](https://protobuf.dev/programming-guides/proto3/#json).
 |-----------------|-------------------------------------|------------------------------------|
 | `map<K, V>`     | `{ [string]: V }`                   | All keys are converted to strings. |
 | `repeated V`    | `[...V]`                            |                                    |
-| `bool`          | `*false \| bool`                    |                                    |
-| `string`        | `*"" \| string`                     |                                    |
-| `bytes`         | `*'' \| bytes`                      |                                    |
-| `int32`         | `*0 \| int32`                       |                                    |
-| `fixed32`       | `*0 \| int32`                       |                                    |
-| `uint32`        | `*0 \| uint32`                      |                                    |
-| `int64`         | `*0 \| int64`                       |                                    |
-| `fixed64`       | `*0 \| fixed64`                     |                                    |
-| `uint32`        | `*0 \| uint64`                      |                                    |
-| `float`         | `*0 \| float32`                     |                                    |
-| `double`        | `*0 \| float64`                     |                                    |
+| `bool`          | `bool`                              | Use `default` option for defaults. |
+| `string`        | `string`                            | Use `default` option for defaults. |
+| `bytes`         | `bytes`                             | Use `default` option for defaults. |
+| `int32`         | `int32`                             | Use `default` option for defaults. |
+| `fixed32`       | `int32`                             | Use `default` option for defaults. |
+| `uint32`        | `uint32`                            | Use `default` option for defaults. |
+| `int64`         | `int64`                             | Use `default` option for defaults. |
+| `fixed64`       | `int64`                             | Use `default` option for defaults. |
+| `uint64`        | `uint64`                            | Use `default` option for defaults. |
+| `float`         | `float32`                           | Use `default` option for defaults. |
+| `double`        | `float64`                           | Use `default` option for defaults. |
 | `Any`           | `*null \| { "@type": string, ... }` |                                    |
 | `Struct`        | `*null \| { [string]: _ }`          |                                    |
 | `Value`         | `*null \| _`                        |                                    |
@@ -57,14 +57,46 @@ To:
 
 ```cue
 #Foo: {
-  name: *"" | string
+  name: string
   name: !="xxx"
-  age: *0 | int32
+  age: int32
   age: <100
-  ageNextYear: *0 | int32
+  ageNextYear: int32
   ageNextYear: age+1
 }
 ```
+
+### Default Values
+
+You can specify default values using the `default` field option:
+
+```proto
+message User {
+  bool active = 1 [(cue.field).default = "*true"];
+  int32 age = 2 [(cue.field).default = "*18"];
+  string role = 3 [(cue.field).default = "*\"user\""];
+}
+```
+
+To:
+
+```cue
+#User: {
+  active: *true | bool
+  age: *18 | int32
+  role: *"user" | string
+}
+```
+
+### Custom CUE Package
+
+You can specify a custom CUE import path for your proto files:
+
+```proto
+option (cue.cue_package) = "example.com/schemas/v1";
+```
+
+This allows you to control the CUE import path independently from the Go package path.
 
 ### Enum
 

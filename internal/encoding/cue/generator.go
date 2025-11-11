@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -65,71 +66,62 @@ func printf(f string, args ...any) {
 	fmt.Fprintf(os.Stderr, f, args...)
 }
 
+// getCueImportPath returns the CUE import path for a file.
+// It first checks for a cue_package file option (defined in proto/core/options.proto),
+// falling back to the Go import path if not present.
+func getCueImportPath(file *protogen.File) CueImportPath {
+	// Try to get the cue_package option
+	fileOpts := file.Proto.GetOptions()
+
+	if fileOpts == nil {
+		return ""
+	}
+
+	ext := proto.GetExtension(fileOpts, options.E_CuePackage)
+
+	if ext == nil {
+		return ""
+	}
+
+	if cuePackage, ok := ext.(string); ok && cuePackage != "" {
+		return CueImportPath(cuePackage)
+	}
+
+	return ""
+}
+
 type Generator struct {
-	imports map[protogen.GoImportPath]*ast.ImportSpec
-	deps    map[protogen.GoImportPath]*protogen.File
-	files   map[string]*protogen.File
-	lets    map[string]*ast.LetClause
+	imports    map[protogen.GoImportPath]*ast.ImportSpec
+	deps       map[protogen.GoImportPath]*protogen.File
+	cueImports map[protogen.GoImportPath]CueImportPath // maps GoImportPath to CueImportPath
+	files      map[string]*protogen.File
+	lets       map[string]*ast.LetClause
 }
 
 func NewGenerator() *Generator {
 	return &Generator{
-		imports: map[protogen.GoImportPath]*ast.ImportSpec{},
-		deps:    map[protogen.GoImportPath]*protogen.File{},
-		files:   map[string]*protogen.File{},
-		lets:    map[string]*ast.LetClause{},
+		imports:    map[protogen.GoImportPath]*ast.ImportSpec{},
+		deps:       map[protogen.GoImportPath]*protogen.File{},
+		cueImports: map[protogen.GoImportPath]CueImportPath{},
+		files:      map[string]*protogen.File{},
+		lets:       map[string]*ast.LetClause{},
 	}
 }
 
 func (g *Generator) AddFile(p string, f *protogen.File) {
 	g.files[p] = f
 	g.deps[f.GoImportPath] = f
-	// printf("add dependency:\n  - source=%s\n  - goImportPath=%s\n  - generate=%v\n", p, string(f.GoImportPath), f.Generate)
+	if _, ok := g.cueImports[f.GoImportPath]; !ok {
+		if cueImportPath := getCueImportPath(f); cueImportPath != "" {
+			g.cueImports[f.GoImportPath] = cueImportPath
+		}
+	}
 }
 
 func (g *Generator) UseBuiltinType(ctx context.Context, name string) ast.Expr {
-	letIdent := &ast.Ident{
-		Name: strings.ToUpper(name) + "_",
+	return &ast.Ident{
+		Name: name,
 	}
-	if _, ok := g.lets[name]; !ok {
-		var zero ast.Expr
-		switch name {
-		case "bool":
-			zero = &ast.BasicLit{
-				Kind:  token.STRING,
-				Value: "false",
-			}
-		case "string":
-			zero = &ast.BasicLit{
-				Kind:  token.STRING,
-				Value: `""`,
-			}
-		case "bytes":
-			zero = &ast.BasicLit{
-				Kind:  token.STRING,
-				Value: `''`,
-			}
-		default:
-			zero = &ast.BasicLit{
-				Kind:  token.INT,
-				Value: "0",
-			}
-		}
-		g.lets[name] = &ast.LetClause{
-			Ident: letIdent,
-			Expr: &ast.BinaryExpr{
-				X: &ast.UnaryExpr{
-					Op: token.MUL,
-					X:  zero,
-				},
-				Op: token.OR,
-				Y: &ast.Ident{
-					Name: name,
-				},
-			},
-		}
-	}
-	return letIdent
 }
 
 func (g *Generator) Import(ctx context.Context, p protogen.GoImportPath, alias, name string, resolve bool) (ast.Expr, error) {
@@ -163,10 +155,19 @@ func (g *Generator) Import(ctx context.Context, p protogen.GoImportPath, alias, 
 			},
 		}, nil
 	}
+
+	quotedImportPath := p.String()
+	importPath := string(p)
+
+	if cuePath, ok := g.cueImports[p]; ok && cuePath != "" {
+		quotedImportPath = cuePath.String()
+		importPath = string(cuePath)
+	}
+
 	spec = &ast.ImportSpec{
 		Path: &ast.BasicLit{
 			Kind:     token.STRING,
-			Value:    p.String(),
+			Value:    quotedImportPath,
 			ValuePos: token.Blank.Pos(),
 		},
 		EndPos: token.Newline.Pos(),
@@ -174,7 +175,7 @@ func (g *Generator) Import(ctx context.Context, p protogen.GoImportPath, alias, 
 	if alias == "" {
 		spec.Name = &ast.Ident{
 			NamePos: token.Newline.Pos(),
-			Name:    escapeName(string(p)) + "__",
+			Name:    escapeName(importPath) + "__",
 		}
 	} else {
 		spec.Name = &ast.Ident{
@@ -197,12 +198,42 @@ func (g *Generator) ResolveGoType(ctx context.Context, ident protogen.GoIdent) (
 	return g.Import(ctx, ident.GoImportPath, "", "#"+ident.GoName, true)
 }
 
+// getCuePackageName determines the appropriate CUE package name for a proto file
+func (g *Generator) getCuePackageName(protoPath string, file *protogen.File) string {
+	// Use the directory name that the proto file is in
+	dir := path.Dir(protoPath)
+	if dir == "." || dir == "" {
+		return string(file.GoPackageName)
+	}
+
+	// Get the last part of the directory path
+	parts := strings.Split(dir, "/")
+	if len(parts) > 0 {
+		dirName := parts[len(parts)-1]
+		// Ensure it's a valid CUE identifier
+		if dirName != "" && !strings.ContainsAny(dirName, ".-") {
+			return dirName
+		}
+	}
+
+	// Fallback to "main" if we can't determine a good name
+	return string(file.GoPackageName)
+}
+
 func (g *Generator) GenerateFile(ctx context.Context, p string) (*ast.File, error) {
 	file := g.files[p]
 	ctx = context.WithValue(ctx, generateFileContextKey{}, file)
+
+	// Reset per-file state
+	// The generator is reused across multiple files, so we need to clear imports
+	// that were collected from previous file generations
+	g.imports = map[protogen.GoImportPath]*ast.ImportSpec{}
+	g.lets = map[string]*ast.LetClause{}
+
+	// Set the CUE package name
 	pkg := &ast.Package{
 		Name: &ast.Ident{
-			Name: string(file.GoPackageName),
+			Name: g.getCuePackageName(p, file),
 		},
 	}
 	pkgAttr := &ast.Attribute{
@@ -232,21 +263,32 @@ func (g *Generator) GenerateFile(ctx context.Context, p string) (*ast.File, erro
 		importSpecs[0].Path.ValuePos = token.Blank.Pos()
 	}
 	headDecls := []ast.Decl{pkg, pkgAttr}
-	var importsDecl *ast.ImportDecl
+
+	// Add import declaration if there are any imports
+	// The formatter needs this in Decls to know where to place imports
 	if len(importSpecs) > 0 {
-		importsDecl = &ast.ImportDecl{
+		importsDecl := &ast.ImportDecl{
 			Specs: importSpecs,
 		}
 		headDecls = append(headDecls, importsDecl)
 	}
+
 	for _, let := range g.lets {
 		headDecls = append(headDecls, let)
 	}
 	rootDecls = append(headDecls, rootDecls...)
+
+	// Only set Imports field if there are actual imports
+	// Setting it to an empty slice causes the formatter to render "import ()"
+	var imports []*ast.ImportSpec
+	if len(importSpecs) > 0 {
+		imports = importSpecs
+	}
+
 	root := ast.File{
 		Filename:   file.GeneratedFilenamePrefix + "_gen.cue",
 		Decls:      rootDecls,
-		Imports:    importSpecs,
+		Imports:    imports,
 		Unresolved: []*ast.Ident{},
 	}
 	return &root, nil
@@ -626,12 +668,28 @@ func (g *Generator) fieldAsFields(ctx context.Context, f *protogen.Field) ([]*as
 	if err != nil {
 		return nil, err
 	}
+
+	// Handle default field option
+	if opt != nil && opt.Default != "" {
+		// Parse the default value to create the appropriate CUE expression
+		defaultExpr, err := parser.ParseExpr("", opt.Default, parser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse default value %q for field %s: %w", opt.Default, f.Desc.Name(), err)
+		}
+
+		// Create a binary expression: *defaultValue | type
+		cueField.Value = &ast.BinaryExpr{
+			X:  defaultExpr, // The default value (e.g., *true, *false, etc.)
+			Op: token.OR,
+			Y:  cueField.Value, // The original type (e.g., bool, string, etc.)
+		}
+	}
+
 	cueFields = append(cueFields, cueField)
 	if opt != nil && opt.Expr != "" {
 		valExpr, err := parser.ParseExpr("", opt.Expr, parser.ParseComments)
 		if err != nil {
-			// TODO handle
-			panic(err)
+			return nil, fmt.Errorf("failed to parse expression %q for field %s: %w", opt.Expr, f.Desc.Name(), err)
 		}
 		cueValField := &ast.Field{
 			Label:    safeLabel(f.Desc.JSONName()),
