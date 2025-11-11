@@ -7,7 +7,11 @@
 package v1
 
 import (
-	_ "github.com/ornew/protoc-gen-cue/pkg/options"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
+	_ "github.com/Bestowinc/protoc-gen-cue/pkg/options"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	anypb "google.golang.org/protobuf/types/known/anypb"
@@ -17,9 +21,6 @@ import (
 	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -1270,7 +1271,7 @@ const file_example_v1_example_proto_rawDesc = "" +
 	"\x10EnumComment_ZERO\x10\x00\x12\x13\n" +
 	"\x0fEnumComment_ONE\x10\x01*-\n" +
 	"\x10EnumCommentRight\x12\x19\n" +
-	"\x15EnumCommentRight_ZERO\x10\x00B0Z.github.com/ornew/protoc-gen-cue/example/gen;v1b\x06proto3"
+	"\x15EnumCommentRight_ZERO\x10\x00B0Z.github.com/Bestowinc/protoc-gen-cue/example/gen;v1b\x06proto3"
 
 var (
 	file_example_v1_example_proto_rawDescOnce sync.Once

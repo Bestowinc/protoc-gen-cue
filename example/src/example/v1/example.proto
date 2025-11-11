@@ -11,7 +11,7 @@ import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
-option go_package = "github.com/ornew/protoc-gen-cue/example/gen;v1";
+option go_package = "github.com/Bestowinc/protoc-gen-cue/example/gen;v1";
 
 message Message {
   string field = 1;

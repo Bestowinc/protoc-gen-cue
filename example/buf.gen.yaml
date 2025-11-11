@@ -8,5 +8,5 @@ plugins:
     out: gen
     opt:
       - paths=source_relative
-    # path: [go, run, github.com/ornew/protoc-gen-cue]
+    # path: [go, run, github.com/Bestowinc/protoc-gen-cue]
     path: [go, run, ..]

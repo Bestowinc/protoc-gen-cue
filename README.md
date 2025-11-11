@@ -44,7 +44,7 @@ Complies with [protojson](https://protobuf.dev/programming-guides/proto3/#json).
 ### Message
 
 ```proto
-import "github.com/ornew/protoc-gen-cue/pkg/options/cue.proto";
+import "github.com/Bestowinc/protoc-gen-cue/pkg/options/cue.proto";
 
 message Foo {
   string name = 1 [(cue.field).expr = '!="xxx"'];

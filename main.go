@@ -30,8 +30,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
 
-	encodingcue "github.com/ornew/protoc-gen-cue/internal/encoding/cue"
-	"github.com/ornew/protoc-gen-cue/pkg/options"
+	encodingcue "github.com/Bestowinc/protoc-gen-cue/internal/encoding/cue"
+	"github.com/Bestowinc/protoc-gen-cue/pkg/options"
 )
 
 var (

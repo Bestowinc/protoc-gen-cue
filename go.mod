@@ -1,4 +1,4 @@
-module github.com/ornew/protoc-gen-cue
+module github.com/Bestowinc/protoc-gen-cue
 
 go 1.23.0
 

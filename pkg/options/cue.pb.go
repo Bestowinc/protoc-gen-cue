@@ -22,12 +22,13 @@
 package options
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 )
 
 const (
@@ -130,7 +131,7 @@ const file_cue_proto_rawDesc = "" +
 	"\adefault\x18\x02 \x01(\tB\x03\x88\x01\x01R\adefault:H\n" +
 	"\x05field\x12\x1d.google.protobuf.FieldOptions\x18\xbb\x8a\x0e \x01(\v2\x11.cue.FieldOptionsR\x05field:B\n" +
 	"\vcue_package\x12\x1c.google.protobuf.FileOptions\x18ц\x03 \x01(\tR\n" +
-	"cuePackage\x88\x01\x01B-Z+github.com/ornew/protoc-gen-cue/pkg/optionsb\x06proto3"
+	"cuePackage\x88\x01\x01B-Z+github.com/Bestowinc/protoc-gen-cue/pkg/optionsb\x06proto3"
 
 var (
 	file_cue_proto_rawDescOnce sync.Once

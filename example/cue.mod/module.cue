@@ -1,1 +1,1 @@
-module: "github.com/ornew/protoc-gen-cue/example"
+module: "github.com/Bestowinc/protoc-gen-cue/example"
