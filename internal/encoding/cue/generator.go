@@ -22,6 +22,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -254,9 +255,16 @@ func (g *Generator) GenerateFile(ctx context.Context, p string) (*ast.File, erro
 	for _, field := range fields {
 		rootDecls = append(rootDecls, field)
 	}
-	var importSpecs []*ast.ImportSpec
-	for _, i := range g.imports {
-		importSpecs = append(importSpecs, i)
+	importPaths := make([]protogen.GoImportPath, 0, len(g.imports))
+	for p := range g.imports {
+		importPaths = append(importPaths, p)
+	}
+	sort.Slice(importPaths, func(i, j int) bool {
+		return importPaths[i] < importPaths[j]
+	})
+	importSpecs := make([]*ast.ImportSpec, 0, len(importPaths))
+	for _, p := range importPaths {
+		importSpecs = append(importSpecs, g.imports[p])
 	}
 	if len(importSpecs) == 1 {
 		importSpecs[0].Name.NamePos = token.Blank.Pos()
@@ -273,8 +281,13 @@ func (g *Generator) GenerateFile(ctx context.Context, p string) (*ast.File, erro
 		headDecls = append(headDecls, importsDecl)
 	}
 
-	for _, let := range g.lets {
-		headDecls = append(headDecls, let)
+	letKeys := make([]string, 0, len(g.lets))
+	for k := range g.lets {
+		letKeys = append(letKeys, k)
+	}
+	sort.Strings(letKeys)
+	for _, k := range letKeys {
+		headDecls = append(headDecls, g.lets[k])
 	}
 	rootDecls = append(headDecls, rootDecls...)
 
