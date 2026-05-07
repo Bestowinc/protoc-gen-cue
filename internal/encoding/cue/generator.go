@@ -37,6 +37,39 @@ import (
 
 type generateFileContextKey struct{}
 
+// shadowedBuiltinsContextKey carries the set of CUE built-in type names that
+// the message currently being generated shadows via a same-named field. When
+// a builtin in this set is requested as a field type, generation rewrites it
+// to a file-scope let-alias instead of a bare identifier (which would resolve
+// to the shadowing optional field and break JSON export).
+type shadowedBuiltinsContextKey struct{}
+
+// cueBuiltinTypeNames are CUE predeclared type identifiers that, if used as a
+// proto field name, shadow the built-in type at any reference site within the
+// same struct. JSON export then fails with "cannot reference optional field".
+var cueBuiltinTypeNames = map[string]bool{
+	"string":  true,
+	"bytes":   true,
+	"bool":    true,
+	"int":     true,
+	"int8":    true,
+	"int16":   true,
+	"int32":   true,
+	"int64":   true,
+	"uint":    true,
+	"uint8":   true,
+	"uint16":  true,
+	"uint32":  true,
+	"uint64":  true,
+	"float32": true,
+	"float64": true,
+	"number":  true,
+}
+
+func builtinAliasName(builtin string) string {
+	return "_builtin_" + builtin
+}
+
 var escape *regexp.Regexp
 
 func init() {
@@ -120,6 +153,20 @@ func (g *Generator) AddFile(p string, f *protogen.File) {
 }
 
 func (g *Generator) UseBuiltinType(ctx context.Context, name string) ast.Expr {
+	if shadowed, ok := ctx.Value(shadowedBuiltinsContextKey{}).(map[string]bool); ok {
+		if shadowed[name] {
+			alias := builtinAliasName(name)
+			if _, exists := g.lets[alias]; !exists {
+				g.lets[alias] = &ast.LetClause{
+					Ident: &ast.Ident{Name: alias},
+					Expr:  &ast.Ident{Name: name},
+				}
+			}
+			return &ast.Ident{
+				Name: alias,
+			}
+		}
+	}
 	return &ast.Ident{
 		Name: name,
 	}
@@ -529,6 +576,20 @@ func (g *Generator) messageAsDef(ctx context.Context, m *protogen.Message) (*ast
 		At:   token.NewSection.Pos(),
 		Text: "@protobuf(" + string(m.Desc.FullName()) + ")",
 	})
+	// Detect proto fields whose JSON names shadow CUE built-in types and
+	// propagate the set via context so UseBuiltinType emits an alias (and
+	// lazily registers the file-scope let binding) when a shadowed builtin is
+	// referenced as a field type inside this struct.
+	shadowed := map[string]bool{}
+	for _, f := range m.Fields {
+		name := f.Desc.JSONName()
+		if cueBuiltinTypeNames[name] {
+			shadowed[name] = true
+		}
+	}
+	if len(shadowed) > 0 {
+		ctx = context.WithValue(ctx, shadowedBuiltinsContextKey{}, shadowed)
+	}
 	for _, oneof := range m.Oneofs {
 		field, err := g.oneofAsField(ctx, oneof)
 		if err != nil {
