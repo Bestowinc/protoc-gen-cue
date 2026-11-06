@@ -1,0 +1,13 @@
+upgrade the cue version to the latest version
+
+---
+
+i bumped go to 1.26, and protovuf  to 1.36.1
+
+---
+
+i bumped go to 1.26, and protovuf  to 1.36.11
+
+---
+
+commit and create the PR
