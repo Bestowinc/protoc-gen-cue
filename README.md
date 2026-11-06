@@ -139,11 +139,11 @@ To:
 
 ### Timestamp
 
-Currently defined by an unconstrained `string`. This is due to the fact that CUE's built-in `time.Time` constraint is incompatible with the JSON format defined in the `timestamppb`. We plan to fix this issue in a future version to follow the original format. See for more details: [time.Time on pkg.go.dev](https://pkg.go.dev/cuelang.org/go@v0.5.0/pkg/time#Time) and [timestamppb.Timestamp](https://pkg.go.dev/google.golang.org/protobuf@v1.31.0/types/known/timestamppb#hdr-JSON_Mapping)
+Currently defined by an unconstrained `string`. This is due to the fact that CUE's built-in `time.Time` constraint is incompatible with the JSON format defined in the `timestamppb`. We plan to fix this issue in a future version to follow the original format. See for more details: [time.Time on pkg.go.dev](https://pkg.go.dev/cuelang.org/go@v0.17.1/pkg/time#Time) and [timestamppb.Timestamp](https://pkg.go.dev/google.golang.org/protobuf@v1.31.0/types/known/timestamppb#hdr-JSON_Mapping)
 
 ### Duration
 
-Currently defined by an unconstrained `string`. This is due to the fact that CUE's built-in `time.Duration` constraint is incompatible with the JSON format defined in the `durationpb`. We plan to fix this issue in a future version to follow the original format. See for more details: [time.Duration in pkg.go.dev](https://pkg.go.dev/cuelang.org/go@v0.5.0/pkg/time#Duration) and [descriptorpb.Duration](https://pkg.go.dev/google.golang.org/protobuf/types/known/durationpb#hdr-JSON_Mapping)
+Currently defined by an unconstrained `string`. This is due to the fact that CUE's built-in `time.Duration` constraint is incompatible with the JSON format defined in the `durationpb`. We plan to fix this issue in a future version to follow the original format. See for more details: [time.Duration in pkg.go.dev](https://pkg.go.dev/cuelang.org/go@v0.17.1/pkg/time#Duration) and [descriptorpb.Duration](https://pkg.go.dev/google.golang.org/protobuf/types/known/durationpb#hdr-JSON_Mapping)
 
 ### Optional (proto3)
 
