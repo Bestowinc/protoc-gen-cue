@@ -338,17 +338,9 @@ func (g *Generator) GenerateFile(ctx context.Context, p string) (*ast.File, erro
 	}
 	rootDecls = append(headDecls, rootDecls...)
 
-	// Only set Imports field if there are actual imports
-	// Setting it to an empty slice causes the formatter to render "import ()"
-	var imports []*ast.ImportSpec
-	if len(importSpecs) > 0 {
-		imports = importSpecs
-	}
-
 	root := ast.File{
 		Filename:   file.GeneratedFilenamePrefix + "_gen.cue",
 		Decls:      rootDecls,
-		Imports:    imports,
 		Unresolved: []*ast.Ident{},
 	}
 	return &root, nil
@@ -409,7 +401,6 @@ func (g *Generator) enumValueAsDef(ctx context.Context, ev *protogen.EnumValue) 
 			NamePos: token.Newline.Pos(),
 			Name:    "#" + ev.GoIdent.GoName,
 		},
-		Optional: token.NoPos,
 		Value: &ast.BasicLit{
 			Kind:  token.STRING,
 			Value: fmt.Sprintf("%q", ev.Desc.Name()),
@@ -447,8 +438,7 @@ func (g *Generator) enumAsDef(ctx context.Context, e *protogen.Enum) (*ast.Field
 			NamePos: token.Newline.Pos(),
 			Name:    "#" + e.GoIdent.GoName,
 		},
-		Optional: token.NoPos,
-		Attrs:    []*ast.Attribute{},
+		Attrs: []*ast.Attribute{},
 	}
 	for _, enumItem := range e.Values {
 		var value ast.Expr
@@ -506,8 +496,7 @@ func (g *Generator) oneofAsField(ctx context.Context, e *protogen.Oneof) (*ast.F
 		// 		Value: "null",
 		// 	},
 		// },
-		Optional: token.NoPos,
-		Attrs:    []*ast.Attribute{},
+		Attrs: []*ast.Attribute{},
 	}
 	for _, which := range e.Fields {
 		id := &ast.BasicLit{
@@ -551,9 +540,8 @@ func (g *Generator) messageAsDef(ctx context.Context, m *protogen.Message) (*ast
 		Label: &ast.Ident{
 			Name: "#" + m.GoIdent.GoName,
 		},
-		Optional: token.NoPos,
-		Value:    s,
-		Attrs:    []*ast.Attribute{},
+		Value: s,
+		Attrs: []*ast.Attribute{},
 	}
 	for _, c := range m.Comments.LeadingDetached {
 		if cg := toLeadingComments(c); cg != nil {
@@ -616,16 +604,15 @@ func (g *Generator) fieldAsField(ctx context.Context, f *protogen.Field) (*ast.F
 		// {Text: fmt.Sprintf("@debug(%s,%d,%d,%v)", f.Desc.Kind().GoString(), f.Desc.Cardinality(), f.Desc.Index(), f.Desc.IsList())},
 	}
 	cueField := &ast.Field{
-		Label:    safeLabel(f.Desc.JSONName()),
-		Optional: token.NoPos,
-		Attrs:    attrs,
+		Label: safeLabel(f.Desc.JSONName()),
+		Attrs: attrs,
 	}
 
 	if f.Desc.HasOptionalKeyword() {
-		cueField.Optional = token.Blank.Pos()
+		cueField.Constraint = token.OPTION
 	}
 	if oneof := f.Desc.ContainingOneof(); oneof != nil {
-		cueField.Optional = token.Blank.Pos()
+		cueField.Constraint = token.OPTION
 	}
 	switch f.Desc.Kind() {
 	case protoreflect.MessageKind:
@@ -766,10 +753,9 @@ func (g *Generator) fieldAsFields(ctx context.Context, f *protogen.Field) ([]*as
 			return nil, fmt.Errorf("failed to parse expression %q for field %s: %w", opt.Expr, f.Desc.Name(), err)
 		}
 		cueValField := &ast.Field{
-			Label:    safeLabel(f.Desc.JSONName()),
-			Optional: token.NoPos,
-			Value:    valExpr,
-			Attrs:    []*ast.Attribute{},
+			Label: safeLabel(f.Desc.JSONName()),
+			Value: valExpr,
+			Attrs: []*ast.Attribute{},
 		}
 		cueFields = append(cueFields, cueValField)
 	}
