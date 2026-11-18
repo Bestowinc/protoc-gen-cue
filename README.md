@@ -116,6 +116,24 @@ To:
 #Bar_ONE:  "ONE"
 ```
 
+#### `enum_style=regex`
+
+CUE checks a value against a disjunction one arm at a time, and builds an error
+for every arm that doesn't match. For an enum with many values, set the
+`enum_style=regex` plugin option to generate the default value plus one regex
+for the rest:
+
+```cue
+#Bar: *"ZERO" | =~"^(ONE|TWO|THREE)$"
+```
+
+It accepts the same values and has the same default. A single remaining value
+is emitted as a plain string, for example `*"ZERO" | "ONE"`, and a single-value
+enum as just that value. The `#Bar_VALUE` definitions are still emitted. An
+invalid value is reported as not matching the regex, rather than as a list of
+conflicts with each value. The default, `enum_style=disjunction`, is the output
+shown above.
+
 ### Oneof
 
 ```proto

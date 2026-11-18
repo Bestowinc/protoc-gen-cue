@@ -124,12 +124,43 @@ func getCueImportPath(file *protogen.File) CueImportPath {
 	return ""
 }
 
+// EnumStyle selects how an enum's #Enum definition is generated.
+type EnumStyle string
+
+const (
+	// EnumStyleDisjunction emits a disjunction of the #Enum_VALUE definitions:
+	//
+	//	#Enum: *#Enum_ZERO | #Enum_ONE | #Enum_TWO
+	EnumStyleDisjunction EnumStyle = "disjunction"
+
+	// EnumStyleRegex emits the default value plus one regex for the rest:
+	//
+	//	#Enum: *"ZERO" | =~"^(ONE|TWO)$"
+	//
+	// It accepts the same values as EnumStyleDisjunction, but CUE evaluates a
+	// regex far more cheaply than a disjunction with many arms.
+	EnumStyleRegex EnumStyle = "regex"
+)
+
+// ParseEnumStyle parses the enum_style plugin option. An empty string selects
+// EnumStyleDisjunction.
+func ParseEnumStyle(s string) (EnumStyle, error) {
+	switch EnumStyle(s) {
+	case "", EnumStyleDisjunction:
+		return EnumStyleDisjunction, nil
+	case EnumStyleRegex:
+		return EnumStyleRegex, nil
+	}
+	return "", fmt.Errorf("unknown enum_style %q: want %q or %q", s, EnumStyleDisjunction, EnumStyleRegex)
+}
+
 type Generator struct {
 	imports    map[protogen.GoImportPath]*ast.ImportSpec
 	deps       map[protogen.GoImportPath]*protogen.File
 	cueImports map[protogen.GoImportPath]CueImportPath // maps GoImportPath to CueImportPath
 	files      map[string]*protogen.File
 	lets       map[string]*ast.LetClause
+	enumStyle  EnumStyle
 }
 
 func NewGenerator() *Generator {
@@ -139,7 +170,14 @@ func NewGenerator() *Generator {
 		cueImports: map[protogen.GoImportPath]CueImportPath{},
 		files:      map[string]*protogen.File{},
 		lets:       map[string]*ast.LetClause{},
+		enumStyle:  EnumStyleDisjunction,
 	}
+}
+
+// SetEnumStyle selects how enums are generated. The default is
+// EnumStyleDisjunction.
+func (g *Generator) SetEnumStyle(s EnumStyle) {
+	g.enumStyle = s
 }
 
 func (g *Generator) AddFile(p string, f *protogen.File) {
@@ -432,14 +470,10 @@ func (g *Generator) enumValueAsDef(ctx context.Context, ev *protogen.EnumValue) 
 	return field, nil
 }
 
-func (g *Generator) enumAsDef(ctx context.Context, e *protogen.Enum) (*ast.Field, error) {
-	field := &ast.Field{
-		Label: &ast.Ident{
-			NamePos: token.Newline.Pos(),
-			Name:    "#" + e.GoIdent.GoName,
-		},
-		Attrs: []*ast.Attribute{},
-	}
+// enumDisjunctionExpr builds `*#Enum_ZERO | #Enum_ONE | ...`, referencing the
+// #Enum_VALUE definitions emitted by enumValueAsDef.
+func enumDisjunctionExpr(e *protogen.Enum) ast.Expr {
+	var expr ast.Expr
 	for _, enumItem := range e.Values {
 		var value ast.Expr
 		value = &ast.BasicLit{
@@ -452,15 +486,87 @@ func (g *Generator) enumAsDef(ctx context.Context, e *protogen.Enum) (*ast.Field
 				X:  value,
 			}
 		}
-		if field.Value == nil {
-			field.Value = value
+		if expr == nil {
+			expr = value
 			continue
 		}
-		field.Value = &ast.BinaryExpr{
-			X:  field.Value,
+		expr = &ast.BinaryExpr{
+			X:  expr,
 			Op: token.OR,
 			Y:  value,
 		}
+	}
+	return expr
+}
+
+// enumRegexExpr builds `*"ZERO" | =~"^(ONE|TWO)$"`. It accepts the same values
+// as enumDisjunctionExpr, with the same default, without a disjunction arm per
+// value. The default is the first value numbered 0 and is left out of the
+// regex. A single remaining value is emitted as a plain string, and an enum
+// with a single value is emitted as just that value.
+func enumRegexExpr(e *protogen.Enum) ast.Expr {
+	var (
+		def   string
+		names []string
+		seen  = map[string]bool{}
+	)
+	for _, v := range e.Values {
+		name := string(v.Desc.Name())
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		if def == "" && len(e.Values) > 1 && v.Desc.Number() == 0 {
+			def = name
+			continue
+		}
+		names = append(names, name)
+	}
+
+	var rest ast.Expr
+	switch len(names) {
+	case 0:
+	case 1:
+		rest = &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(names[0])}
+	default:
+		quoted := make([]string, len(names))
+		for i, n := range names {
+			quoted[i] = regexp.QuoteMeta(n)
+		}
+		rest = &ast.UnaryExpr{
+			Op: token.MAT,
+			X: &ast.BasicLit{
+				Kind:  token.STRING,
+				Value: strconv.Quote("^(" + strings.Join(quoted, "|") + ")$"),
+			},
+		}
+	}
+	if def == "" {
+		return rest
+	}
+	defExpr := &ast.UnaryExpr{
+		Op: token.MUL,
+		X:  &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(def)},
+	}
+	if rest == nil {
+		return defExpr
+	}
+	return &ast.BinaryExpr{X: defExpr, Op: token.OR, Y: rest}
+}
+
+func (g *Generator) enumAsDef(ctx context.Context, e *protogen.Enum) (*ast.Field, error) {
+	field := &ast.Field{
+		Label: &ast.Ident{
+			NamePos: token.Newline.Pos(),
+			Name:    "#" + e.GoIdent.GoName,
+		},
+		Attrs: []*ast.Attribute{},
+	}
+	switch g.enumStyle {
+	case EnumStyleRegex:
+		field.Value = enumRegexExpr(e)
+	default:
+		field.Value = enumDisjunctionExpr(e)
 	}
 	for _, c := range e.Comments.LeadingDetached {
 		if cg := toLeadingComments(c); cg != nil {
