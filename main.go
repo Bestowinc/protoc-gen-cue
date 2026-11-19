@@ -63,6 +63,7 @@ func main() {
 	var flags flag.FlagSet
 	_ = flags.String("root", ".", "")
 	generateDefinedPackagesOnly := flags.Bool("generate_defined_packages_only", false, "only generate CUE for files with core.cue_package option set")
+	enumStyleFlag := flags.String("enum_style", "", "how to generate enums: disjunction (default) or regex")
 	protogen.Options{
 		ParamFunc: flags.Set,
 	}.Run(func(gen *protogen.Plugin) error {
@@ -74,7 +75,12 @@ func main() {
 			}
 		}
 		gen.SupportedFeatures = SupportedFeatures
+		enumStyle, err := encodingcue.ParseEnumStyle(*enumStyleFlag)
+		if err != nil {
+			return err
+		}
 		cuegen := encodingcue.NewGenerator()
+		cuegen.SetEnumStyle(enumStyle)
 		genFiles := make(map[string]*protogen.File, len(gen.FilesByPath))
 		for path, file := range gen.FilesByPath {
 			cuegen.AddFile(path, file)
