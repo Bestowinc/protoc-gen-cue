@@ -116,6 +116,35 @@ To:
 #Bar_ONE:  "ONE"
 ```
 
+#### `enum_style=regex`
+
+CUE checks a value against a disjunction one arm at a time, and builds an error
+for every arm that doesn't match. For an enum with many values, set the
+`enum_style=regex` plugin option to generate the default value plus one regex
+for the rest:
+
+```cue
+#Bar: *"ZERO" | =~"^(ONE|TWO|THREE)$" | error("invalid Bar: want one of ZERO, ONE, TWO, THREE")
+```
+
+It accepts the same values and has the same default. A single remaining value
+is emitted as a plain string, for example `*"ZERO" | "ONE" | error(...)`, and a
+single-value enum as just that value. The `#Bar_VALUE` definitions are still
+emitted. An invalid value is reported with the `error()` message, rather than
+as a list of conflicts with each value.
+
+CUE allows `error()` based on the language version a module declares, not the
+version of CUE that evaluates it. The CUE module the generated files are
+published in must set `language.version` in its `cue.mod/module.cue` to
+`v0.14.0` or later; otherwise evaluation fails with `builtin "error" is not
+available in version ...`.
+
+With `allow_alias` and more than one name for 0, the disjunction style marks
+each of them as a default, so an unset field has no single default and fails to
+export. The regex style uses the first of them as the default, as proto3 does.
+
+The default, `enum_style=disjunction`, is the output shown above.
+
 ### Oneof
 
 ```proto
