@@ -131,7 +131,13 @@ It accepts the same values and has the same default. A single remaining value
 is emitted as a plain string, for example `*"ZERO" | "ONE" | error(...)`, and a
 single-value enum as just that value. The `#Bar_VALUE` definitions are still
 emitted. An invalid value is reported with the `error()` message, rather than
-as a list of conflicts with each value. `error()` needs CUE v0.14.0 or later.
+as a list of conflicts with each value.
+
+CUE allows `error()` based on the language version a module declares, not the
+version of CUE that evaluates it. The CUE module the generated files are
+published in must set `language.version` in its `cue.mod/module.cue` to
+`v0.14.0` or later; otherwise evaluation fails with `builtin "error" is not
+available in version ...`.
 
 With `allow_alias` and more than one name for 0, the disjunction style marks
 each of them as a default, so an unset field has no single default and fails to

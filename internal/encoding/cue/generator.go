@@ -139,7 +139,8 @@ const (
 	//
 	// It accepts the same values as EnumStyleDisjunction, but CUE evaluates a
 	// regex far more cheaply than a disjunction with many arms. The error() arm
-	// reports an invalid value with one message, and needs CUE v0.14.0 or later.
+	// reports an invalid value with one message. It needs the CUE module that
+	// holds the generated files to declare language.version v0.14.0 or later.
 	EnumStyleRegex EnumStyle = "regex"
 )
 
@@ -506,8 +507,8 @@ func enumDisjunctionExpr(e *protogen.Enum) ast.Expr {
 // per value. The default is the first value numbered 0 and is left out of the
 // regex. A single remaining value is emitted as a plain string, and an enum
 // with a single value is emitted as just that value. The error() arm replaces
-// CUE's per-arm errors with one message listing the valid values; it needs
-// CUE v0.14.0 or later.
+// CUE's per-arm errors with one message listing the valid values. CUE allows
+// error() only in a module that declares language.version v0.14.0 or later.
 //
 // With allow_alias and more than one name numbered 0, enumDisjunctionExpr
 // marks every such name as a default, so it has no single default and an unset
