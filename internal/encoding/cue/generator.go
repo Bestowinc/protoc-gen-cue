@@ -135,10 +135,11 @@ const (
 
 	// EnumStyleRegex emits the default value plus one regex for the rest:
 	//
-	//	#Enum: *"ZERO" | =~"^(ONE|TWO)$"
+	//	#Enum: *"ZERO" | =~"^(ONE|TWO)$" | error("invalid Enum: want one of ZERO, ONE, TWO")
 	//
 	// It accepts the same values as EnumStyleDisjunction, but CUE evaluates a
-	// regex far more cheaply than a disjunction with many arms.
+	// regex far more cheaply than a disjunction with many arms. The error() arm
+	// reports an invalid value with one message, and needs CUE v0.14.0 or later.
 	EnumStyleRegex EnumStyle = "regex"
 )
 
@@ -499,23 +500,28 @@ func enumDisjunctionExpr(e *protogen.Enum) ast.Expr {
 	return expr
 }
 
-// enumRegexExpr builds `*"ZERO" | =~"^(ONE|TWO)$"`. It accepts the same values
-// as enumDisjunctionExpr, with the same default, without a disjunction arm per
-// value. The default is the first value numbered 0 and is left out of the
+// enumRegexExpr builds
+// `*"ZERO" | =~"^(ONE|TWO)$" | error("invalid Enum: want one of ZERO, ONE, TWO")`.
+// It accepts the same values as enumDisjunctionExpr without a disjunction arm
+// per value. The default is the first value numbered 0 and is left out of the
 // regex. A single remaining value is emitted as a plain string, and an enum
-// with a single value is emitted as just that value.
+// with a single value is emitted as just that value. The error() arm replaces
+// CUE's per-arm errors with one message listing the valid values; it needs
+// CUE v0.14.0 or later.
+//
+// With allow_alias and more than one name numbered 0, enumDisjunctionExpr
+// marks every such name as a default, so it has no single default and an unset
+// field is incomplete. This style uses the first of them as the default, as
+// proto3 does.
 func enumRegexExpr(e *protogen.Enum) ast.Expr {
 	var (
 		def   string
 		names []string
-		seen  = map[string]bool{}
+		all   []string
 	)
 	for _, v := range e.Values {
 		name := string(v.Desc.Name())
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
+		all = append(all, name)
 		if def == "" && len(e.Values) > 1 && v.Desc.Number() == 0 {
 			def = name
 			continue
@@ -541,17 +547,25 @@ func enumRegexExpr(e *protogen.Enum) ast.Expr {
 			},
 		}
 	}
-	if def == "" {
+	if len(all) == 1 {
 		return rest
 	}
-	defExpr := &ast.UnaryExpr{
-		Op: token.MUL,
-		X:  &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(def)},
+	expr := rest
+	if def != "" {
+		expr = &ast.BinaryExpr{
+			X: &ast.UnaryExpr{
+				Op: token.MUL,
+				X:  &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(def)},
+			},
+			Op: token.OR,
+			Y:  rest,
+		}
 	}
-	if rest == nil {
-		return defExpr
-	}
-	return &ast.BinaryExpr{X: defExpr, Op: token.OR, Y: rest}
+	msg := fmt.Sprintf("invalid %s: want one of %s", e.GoIdent.GoName, strings.Join(all, ", "))
+	return &ast.BinaryExpr{X: expr, Op: token.OR, Y: &ast.CallExpr{
+		Fun:  ast.NewIdent("error"),
+		Args: []ast.Expr{&ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(msg)}},
+	}}
 }
 
 func (g *Generator) enumAsDef(ctx context.Context, e *protogen.Enum) (*ast.Field, error) {

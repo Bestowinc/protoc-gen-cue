@@ -124,15 +124,20 @@ for every arm that doesn't match. For an enum with many values, set the
 for the rest:
 
 ```cue
-#Bar: *"ZERO" | =~"^(ONE|TWO|THREE)$"
+#Bar: *"ZERO" | =~"^(ONE|TWO|THREE)$" | error("invalid Bar: want one of ZERO, ONE, TWO, THREE")
 ```
 
 It accepts the same values and has the same default. A single remaining value
-is emitted as a plain string, for example `*"ZERO" | "ONE"`, and a single-value
-enum as just that value. The `#Bar_VALUE` definitions are still emitted. An
-invalid value is reported as not matching the regex, rather than as a list of
-conflicts with each value. The default, `enum_style=disjunction`, is the output
-shown above.
+is emitted as a plain string, for example `*"ZERO" | "ONE" | error(...)`, and a
+single-value enum as just that value. The `#Bar_VALUE` definitions are still
+emitted. An invalid value is reported with the `error()` message, rather than
+as a list of conflicts with each value. `error()` needs CUE v0.14.0 or later.
+
+With `allow_alias` and more than one name for 0, the disjunction style marks
+each of them as a default, so an unset field has no single default and fails to
+export. The regex style uses the first of them as the default, as proto3 does.
+
+The default, `enum_style=disjunction`, is the output shown above.
 
 ### Oneof
 

@@ -27,8 +27,8 @@ func enumValue(name string, number int32) *descriptorpb.EnumValueDescriptorProto
 }
 
 // enumsFile covers the cases enum generation has to handle: a plain enum, a
-// single-value enum, a two-value enum, an allow_alias enum and an enum nested
-// in a message.
+// single-value enum, a two-value enum, an allow_alias enum, an allow_alias enum
+// with two names for 0 and an enum nested in a message.
 func enumsFile() *descriptorpb.FileDescriptorProto {
 	return &descriptorpb.FileDescriptorProto{
 		Name:    proto.String(enumsProtoPath),
@@ -64,6 +64,15 @@ func enumsFile() *descriptorpb.FileDescriptorProto {
 					enumValue("STATUS_STARTED", 1),
 					enumValue("STATUS_RUNNING", 1),
 					enumValue("STATUS_DONE", 2),
+				},
+			},
+			{
+				Name:    proto.String("ZeroAlias"),
+				Options: &descriptorpb.EnumOptions{AllowAlias: proto.Bool(true)},
+				Value: []*descriptorpb.EnumValueDescriptorProto{
+					enumValue("ZERO_ALIAS_FIRST", 0),
+					enumValue("ZERO_ALIAS_SECOND", 0),
+					enumValue("ZERO_ALIAS_ONE", 1),
 				},
 			},
 		},
@@ -155,7 +164,9 @@ func TestEnumGolden(t *testing.T) {
 }
 
 // TestEnumStylesAgree checks that both styles accept and reject the same
-// values and resolve to the same default.
+// values and resolve to the same default, except for an enum with two names
+// for 0 (see enumRegexExpr), and that the regex style reports an invalid value
+// with its error() message.
 func TestEnumStylesAgree(t *testing.T) {
 	ctx := cuecontext.New()
 	compile := func(style EnumStyle) cue.Value {
@@ -172,12 +183,21 @@ func TestEnumStylesAgree(t *testing.T) {
 		"SINGLE_ONLY", "PAIR_ZERO", "PAIR_ONE",
 		"STATUS_UNSPECIFIED", "STATUS_STARTED", "STATUS_RUNNING", "STATUS_DONE",
 		"FINISH_UNSPECIFIED", "FINISH_MATTE", "FINISH_GLOSS",
+		"ZERO_ALIAS_FIRST", "ZERO_ALIAS_SECOND", "ZERO_ALIAS_ONE",
 	}
 	// Rejected by every enum, including values that would match a regex
 	// without its anchors or grouping.
 	invalid := []string{"", "NOPE", "COLOR_REDX", "XCOLOR_RED", "COLOR_RED|COLOR_BLUE", "COLOR_.*"}
 	inputs := append(append([]string{}, valid...), invalid...)
-	defs := []string{"#Color", "#Single", "#Pair", "#Status", "#Paint_Finish"}
+	defs := []string{"#Color", "#Single", "#Pair", "#Status", "#ZeroAlias", "#Paint_Finish"}
+	// The want-one-of message of each enum with more than one value.
+	messages := map[string]string{
+		"#Color":        "invalid Color: want one of COLOR_UNSPECIFIED, COLOR_RED, COLOR_GREEN, COLOR_BLUE",
+		"#Pair":         "invalid Pair: want one of PAIR_ZERO, PAIR_ONE",
+		"#Status":       "invalid Status: want one of STATUS_UNSPECIFIED, STATUS_STARTED, STATUS_RUNNING, STATUS_DONE",
+		"#ZeroAlias":    "invalid ZeroAlias: want one of ZERO_ALIAS_FIRST, ZERO_ALIAS_SECOND, ZERO_ALIAS_ONE",
+		"#Paint_Finish": "invalid Paint_Finish: want one of FINISH_UNSPECIFIED, FINISH_MATTE, FINISH_GLOSS",
+	}
 
 	for _, def := range defs {
 		path := cue.ParsePath(def)
@@ -190,7 +210,16 @@ func TestEnumStylesAgree(t *testing.T) {
 		rDef, rOK := r.Default()
 		dStr, _ := dDef.String()
 		rStr, _ := rDef.String()
-		if dOK != rOK || dStr != rStr {
+		if def == "#ZeroAlias" {
+			// The disjunction style marks both names for 0 as defaults, which
+			// leaves an unset value incomplete. The regex style uses the first.
+			if d.Validate(cue.Concrete(true)) == nil {
+				t.Errorf("%s: disjunction default: want incomplete, got %q", def, dStr)
+			}
+			if !rOK || rStr != "ZERO_ALIAS_FIRST" {
+				t.Errorf("%s: regex default = (%q, %v), want (%q, true)", def, rStr, rOK, "ZERO_ALIAS_FIRST")
+			}
+		} else if dOK != rOK || dStr != rStr {
 			t.Errorf("%s: default: disjunction=(%q, %v) regex=(%q, %v)", def, dStr, dOK, rStr, rOK)
 		}
 
@@ -202,8 +231,13 @@ func TestEnumStylesAgree(t *testing.T) {
 			}
 		}
 		for _, in := range invalid {
-			if r.Unify(ctx.CompileString(strconv.Quote(in))).Validate(cue.Concrete(true)) == nil {
+			err := r.Unify(ctx.CompileString(strconv.Quote(in))).Validate(cue.Concrete(true))
+			if err == nil {
 				t.Errorf("%s & %q: regex style accepted an invalid value", def, in)
+				continue
+			}
+			if msg, ok := messages[def]; ok && err.Error() != def+": "+msg {
+				t.Errorf("%s & %q: regex style error = %q, want %q", def, in, err, def+": "+msg)
 			}
 		}
 	}
